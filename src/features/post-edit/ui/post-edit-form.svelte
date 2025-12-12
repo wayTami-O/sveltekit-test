@@ -3,6 +3,7 @@
 	import { Button, Input, Textarea, Card, CardContent } from '$shared/ui';
 	import { uploadImage } from '$features/image-upload/api.js';
 	import { goto } from '$app/navigation';
+	import { postFormSchema, type PostFormData } from '$entities/post/model/schema.js';
 
 	let { data }: { data: { post: BlogPost } } = $props();
 
@@ -14,6 +15,7 @@
 	let imagePreview = $state('');
 	let uploading = $state(false);
 	let submitting = $state(false);
+	let errors = $state<Partial<Record<keyof PostFormData, string>>>({});
 
 	$effect(() => {
 		const post = data.post;
@@ -69,9 +71,31 @@
 		}
 	}
 
+	function validateForm(): boolean {
+		errors = {};
+		
+		const result = postFormSchema.safeParse({
+			title: title.trim(),
+			content: content.trim(),
+			excerpt: excerpt.trim() || '',
+			imageUrl: imageUrl || ''
+		});
+
+		if (!result.success) {
+			result.error.issues.forEach((issue) => {
+				const field = issue.path[0] as keyof PostFormData;
+				if (field) {
+					errors[field] = issue.message;
+				}
+			});
+			return false;
+		}
+
+		return true;
+	}
+
 	async function handleSubmit() {
-		if (!title.trim() || !content.trim()) {
-			alert('Заполните все обязательные поля');
+		if (!validateForm()) {
 			return;
 		}
 
@@ -98,7 +122,7 @@
 			}
 		} catch (error) {
 			console.error('Failed to update post:', error);
-				alert('Ошибка при обновлении поста');
+			alert('Ошибка при обновлении поста');
 		} finally {
 			submitting = false;
 		}
@@ -119,7 +143,16 @@
 					<label for="title" class="block text-sm font-medium text-gray-700 mb-2">
 						Заголовок *
 					</label>
-					<Input id="title" bind:value={title} placeholder="Введите заголовок поста" required />
+					<Input
+						id="title"
+						bind:value={title}
+						placeholder="Введите заголовок поста"
+						class={errors.title ? 'border-red-500' : ''}
+						required
+					/>
+					{#if errors.title}
+						<p class="mt-1 text-sm text-red-600">{errors.title}</p>
+					{/if}
 				</div>
 
 				<div>
@@ -155,8 +188,12 @@
 						id="excerpt"
 						bind:value={excerpt}
 						placeholder="Краткое описание поста"
+						class={errors.excerpt ? 'border-red-500' : ''}
 						rows={3}
 					/>
+					{#if errors.excerpt}
+						<p class="mt-1 text-sm text-red-600">{errors.excerpt}</p>
+					{/if}
 				</div>
 
 				<div>
@@ -167,9 +204,13 @@
 						id="content"
 						bind:value={content}
 						placeholder="Напишите содержание поста..."
+						class={errors.content ? 'border-red-500' : ''}
 						rows={15}
 						required
 					/>
+					{#if errors.content}
+						<p class="mt-1 text-sm text-red-600">{errors.content}</p>
+					{/if}
 				</div>
 
 				<div class="flex justify-end gap-4">

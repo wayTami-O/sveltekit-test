@@ -2,6 +2,7 @@
 	import { Button, Input, Textarea, Card, CardContent } from '$shared/ui';
 	import { uploadImage } from '$features/image-upload/api.js';
 	import { goto } from '$app/navigation';
+	import { postFormSchema, type PostFormData } from '$entities/post/model/schema.js';
 
 	let title = $state('');
 	let content = $state('');
@@ -11,6 +12,7 @@
 	let imagePreview = $state('');
 	let uploading = $state(false);
 	let submitting = $state(false);
+	let errors = $state<Partial<Record<keyof PostFormData, string>>>({});
 
 	function generateExcerpt() {
 		if (!excerpt && content) {
@@ -55,9 +57,56 @@
 		imageUrl = '';
 	}
 
+	function validateField(field: keyof PostFormData): void {
+		const result = postFormSchema.safeParse({
+			title: title.trim(),
+			content: content.trim(),
+			excerpt: excerpt.trim() || '',
+			imageUrl: imageUrl || ''
+		});
+
+		if (!result.success) {
+			const fieldError = result.error.issues.find((issue) => issue.path[0] === field);
+			if (fieldError) {
+				errors = { ...errors, [field]: fieldError.message };
+			} else {
+				const { [field]: _, ...rest } = errors;
+				errors = rest;
+			}
+		} else {
+			const { [field]: _, ...rest } = errors;
+			errors = rest;
+		}
+	}
+
+	function validateForm(): boolean {
+		errors = {};
+		
+		const result = postFormSchema.safeParse({
+			title: title.trim(),
+			content: content.trim(),
+			excerpt: excerpt.trim() || '',
+			imageUrl: imageUrl || ''
+		});
+
+		if (!result.success) {
+			const newErrors: Partial<Record<keyof PostFormData, string>> = {};
+			result.error.issues.forEach((issue) => {
+				const field = issue.path[0] as keyof PostFormData;
+				if (field) {
+					newErrors[field] = issue.message;
+				}
+			});
+			errors = newErrors;
+			return false;
+		}
+
+		return true;
+	}
+
 	async function handleSubmit() {
-		if (!title.trim() || !content.trim()) {
-			alert('Заполните все обязательные поля');
+		if (!validateForm()) {
+			console.log('Validation errors:', errors);
 			return;
 		}
 
@@ -85,7 +134,7 @@
 			}
 		} catch (error) {
 			console.error('Failed to create post:', error);
-				alert('Ошибка при создании поста');
+			alert('Ошибка при создании поста');
 		} finally {
 			submitting = false;
 		}
@@ -106,7 +155,17 @@
 					<label for="title" class="block text-sm font-medium text-gray-700 mb-2">
 						Заголовок *
 					</label>
-					<Input id="title" bind:value={title} placeholder="Введите заголовок поста" required />
+					<Input
+						id="title"
+						bind:value={title}
+						placeholder="Введите заголовок поста"
+						class={errors.title ? '!border-red-500 focus-visible:!ring-red-500' : ''}
+						onblur={() => validateField('title')}
+						required
+					/>
+					{#if errors.title}
+						<p class="mt-1 text-sm text-red-600 font-medium">{errors.title}</p>
+					{/if}
 				</div>
 
 				<div>
@@ -143,8 +202,13 @@
 						id="excerpt"
 						bind:value={excerpt}
 						placeholder="Краткое описание поста (будет сгенерировано автоматически, если оставить пустым)"
+						class={errors.excerpt ? '!border-red-500 focus-visible:!ring-red-500' : ''}
+						onblur={() => validateField('excerpt')}
 						rows={3}
 					/>
+					{#if errors.excerpt}
+						<p class="mt-1 text-sm text-red-600 font-medium">{errors.excerpt}</p>
+					{/if}
 				</div>
 
 				<div>
@@ -155,10 +219,15 @@
 						id="content"
 						bind:value={content}
 						placeholder="Напишите содержание поста..."
+						class={errors.content ? '!border-red-500 focus-visible:!ring-red-500' : ''}
 						rows={15}
 						required
 						oninput={generateExcerpt}
+						onblur={() => validateField('content')}
 					/>
+					{#if errors.content}
+						<p class="mt-1 text-sm text-red-600 font-medium">{errors.content}</p>
+					{/if}
 				</div>
 
 				<div class="flex justify-end gap-4">
